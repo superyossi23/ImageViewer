@@ -1,7 +1,7 @@
-from PyQt5.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QLabel, QVBoxLayout, \
+from PySide6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QLabel, QVBoxLayout, \
     QWidget
-from PyQt5.QtGui import QPixmap, QWheelEvent, QPainter, QColor, QDragEnterEvent, QDropEvent
-from PyQt5.QtCore import Qt
+from PySide6.QtGui import QPixmap, QWheelEvent, QPainter, QColor, QDragEnterEvent, QDropEvent
+from PySide6.QtCore import Qt
 
 import sys
 
@@ -43,15 +43,23 @@ class ImageViewer(QGraphicsView):
     def wheelEvent(self, event: QWheelEvent):
         """Handles mouse wheel zooming while keeping cursor position."""
         try:
-            zoom_in = event.angleDelta().y() > 0  # Positive for zoom in
+            # angleDelta (Qt5/6) -> QPoint, wheel up/down indicated by y
+            try:
+                zoom_in = event.angleDelta().y() > 0
+            except Exception:
+                # Fallback for older API
+                zoom_in = event.delta() > 0
 
-            if zoom_in:
-                factor = self.zoom_factor
+            factor = self.zoom_factor if zoom_in else (1 / self.zoom_factor)
+
+            # Get the cursor position in view coordinates. Qt6 exposes `position()` (QPointF).
+            if hasattr(event, 'position'):
+                ev_pos = event.position().toPoint()
             else:
-                factor = 1 / self.zoom_factor
+                ev_pos = event.pos()
 
-            # Get the cursor position in scene coordinates before zooming
-            cursor_pos = self.mapToScene(event.pos())
+            # Convert to scene coordinates before zooming
+            cursor_pos = self.mapToScene(ev_pos)
 
             # Apply zoom
             self.scale(factor, factor)
@@ -60,10 +68,15 @@ class ImageViewer(QGraphicsView):
             # Get the cursor position in view after zooming
             new_cursor_pos = self.mapFromScene(cursor_pos)
 
-            # Adjust scrollbars to keep cursor at the same position
-            delta = new_cursor_pos - event.pos()
-            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + delta.x())
-            self.verticalScrollBar().setValue(self.verticalScrollBar().value() + delta.y())
+            # Normalize types to QPoint for subtraction
+            try:
+                new_pos_pt = new_cursor_pos.toPoint()
+            except Exception:
+                new_pos_pt = new_cursor_pos
+
+            delta = new_pos_pt - ev_pos
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + int(delta.x()))
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() + int(delta.y()))
 
         except Exception as e:
             print(f"[wheelEvent] Error: {e}")  # Print error for debugging
@@ -94,4 +107,4 @@ if __name__ == "__main__":
     viewer = ImageViewer(r"C:\Users\t-mes\Pictures\27378389-番号-55、赤い円に.jpg")  # Replace with your image path
     viewer.setMouseTracking(True)  # Enable mouse tracking
     viewer.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
